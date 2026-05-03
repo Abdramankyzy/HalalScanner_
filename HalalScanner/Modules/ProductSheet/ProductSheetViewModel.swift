@@ -1,0 +1,93 @@
+import Foundation
+import FirebaseAuth
+import FirebaseFirestore
+
+class ProductSheetViewModel {
+    let product: Product
+    let confidence: Int
+    
+    init(product: Product, confidence: Int) {
+        self.product = product
+        self.confidence = confidence
+    }
+    
+    var emoji: String { product.emoji }
+    var name: String { product.name }
+    var category: String { product.category }
+    var caloriesText: String { "\(product.calories)" }
+    var confidenceText: String { "\(confidence)%" }
+    
+    var halalTitle: String {
+        switch product.halalStatus {
+        case .halal:
+            return "Halal"
+        case .haram:
+            return "Not Halal"
+        case .doubtful:
+            return "Doubtful"
+        }
+    }
+
+    var statusText: String {
+        switch product.halalStatus {
+        case .halal:
+            return "Halal"
+        case .haram:
+            return "Not Halal"
+        case .doubtful:
+            return "Doubtful"
+        }
+    }
+
+      
+      var halalStatus: HalalStatus { product.halalStatus }
+      var haramItem: String? { product.haramItem }
+    var isHalal: Bool {
+        switch product.halalStatus {
+        case .halal:
+            return true
+        case .haram:
+            return false
+        case .doubtful:
+            return false
+        }
+    }
+    
+    
+    func saveToFavorites(completion: @escaping (Bool) -> Void) {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            completion(false)
+            return
+        }
+
+        Firestore.firestore()
+            .collection("favorites")
+            .document(userId)
+            .collection("items")
+            .addDocument(data: makeFavoriteData()) { error in
+                if let error = error {
+                    print("Error:", error.localizedDescription)
+                    completion(false)
+                } else {
+                    print("Saved!")
+                    completion(true)
+                }
+            }
+    }
+    private func makeFavoriteData() -> [String: Any] {
+           [
+               "name": product.name,
+               "emoji": product.emoji,
+               "isHalal": product.isHalal,
+               "confidence": confidence,
+               "category": product.category,
+               "calories": product.calories,
+               "date": Date(),
+               "savedAt": Date()
+           ]
+       }
+
+    
+
+    
+}

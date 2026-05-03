@@ -1,0 +1,105 @@
+import UIKit
+import FirebaseFirestore
+import FirebaseAuth
+import Combine
+
+class FavoritesVC: UIViewController {
+    
+    var favorites: [[String: Any]] = []
+    
+    var viewModel = FavoritesViewModel()
+    
+    var cancellables = Set<AnyCancellable>()
+    let favoritesView = FavoritesView()
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .appBackground
+        title = "Saved"
+        navigationItem.titleView = nil
+        navigationController?.navigationBar.prefersLargeTitles = true
+        
+        showHintIfNeeded()
+        favoritesView.collectionView.delegate = self
+        favoritesView.collectionView.dataSource = self
+        bindViewModel()
+        
+    }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        fetchFavorites()
+    }
+    override func loadView() {
+        view = favoritesView
+    }
+    
+    
+    func bindViewModel() {
+        viewModel.$isLoading
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] loading in
+                if loading { self?.favoritesView.showLoading() }
+            }
+            .store(in: &cancellables)
+
+        viewModel.$favorites
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] items in
+                self?.favorites = items
+                self?.favoritesView.collectionView.reloadData()
+                self?.favoritesView.showContent(isEmpty: items.isEmpty)
+            }
+            .store(in: &cancellables)
+    }
+    
+    func fetchFavorites() {
+        viewModel.fetchScans()
+    }
+    
+    func deleteFromFavorites(at indexPath: IndexPath) {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let item = favorites[indexPath.item]
+        guard let docId = item["documentId"] as? String else { return }
+        
+        Firestore.firestore().collection("favorites").document(uid).collection("items").document(docId).delete()
+        
+        favorites.remove(at: indexPath.item)
+        favoritesView.collectionView.reloadData()
+    }
+    
+    func showHintIfNeeded() {
+        let key = "swipe"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            let hint = UIAlertController(title: "💡 Tip", message: "Long-press an item to delete it", preferredStyle: .alert)
+            hint.addAction(UIAlertAction(title: "Got it!", style: .default))
+            self?.present(hint, animated: true)
+        }
+        
+        
+    }
+    
+}
+
+extension FavoritesVC: UICollectionViewDelegate, UICollectionViewDataSource {
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        return favorites.count
+    }
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "FavoriteCell", for: indexPath) as! FavoriteCell
+        cell.configure(with: favorites[indexPath.item])
+        return cell
+        
+    }
+    func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            let delete = UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+                self?.deleteFromFavorites(at: indexPath)
+            }
+            return UIMenu(title: "", children: [delete])
+        }
+        
+    }
+}
